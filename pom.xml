@@ -66,6 +66,7 @@
                     <mainClass>org.pprrun.pprrregdownloader.PPRRRegDownloader</mainClass>
                     <options>
                         <!-- <option>-Djdk.httpclient.HttpClient.log=all</option> -->
+                        <option>--add-opens</option><option>javafx.graphics/javafx.scene=org.controlsfx.controls</option>
                     </options> 
                 </configuration>
                 <executions>

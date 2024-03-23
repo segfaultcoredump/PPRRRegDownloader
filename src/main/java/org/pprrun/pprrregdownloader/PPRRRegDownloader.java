@@ -3,6 +3,7 @@ package org.pprrun.pprrregdownloader;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -10,11 +11,20 @@ import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.HPos;
@@ -23,7 +33,13 @@ import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
@@ -38,6 +54,7 @@ import javafx.scene.text.Font;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
+import javafx.util.Callback;
 import org.controlsfx.dialog.Wizard;
 import org.controlsfx.dialog.Wizard.LinearFlow;
 import org.controlsfx.dialog.WizardPane;
@@ -283,12 +300,14 @@ public class PPRRRegDownloader extends Application {
 
         // Wizard variables
         final JSONObject setupData = new JSONObject();
+        List<WizardPane> wizardPanes = new ArrayList();
 
         Wizard wizard = new Wizard();
         wizard.setTitle("Setup");
 
         BooleanProperty pane1OkayToGo = new SimpleBooleanProperty(false);
 
+        //////////////////
         // Wizard Pane 1: PPRRScore Directory Location
         // 
         // Request the target dir
@@ -296,8 +315,8 @@ public class PPRRRegDownloader extends Application {
         // Display the Race Name and Date 
         TextField pprrscoreDirTextField = createTextField("pprrscoreDir");
         Button targetDirButton = new Button("Select");
-        Label raceName = new Label("");
-        Label raceDate = new Label("");
+        Label raceNameLabel = new Label("");
+        Label raceDateLabel = new Label("");
 
         targetDirButton.setOnAction((event) -> {
             DirectoryChooser chooser = new DirectoryChooser();
@@ -321,9 +340,9 @@ public class PPRRRegDownloader extends Application {
                         setupData.put("PPRRScoreDir", pprrscoreDirTextField.getText());
                         setupData.put("PPRRScoreConfFile", s);
                         JSONObject fieldList = parsePPRRScoreFieldList(pprrscoreConfDir, s);
-                        setupData.put("fieldList", fieldList);
-                        raceName.setText(fieldList.optString("Racename"));
-                        raceDate.setText(fieldList.getString("EventDate"));
+                        setupData.put("PPRRScoreFieldList", fieldList);
+                        raceNameLabel.setText(fieldList.optString("Racename"));
+                        raceDateLabel.setText(fieldList.getString("EventDate"));
 
                         break;
                     } else if (s.equals("rsuDownloaderConfig.json")) {
@@ -334,8 +353,8 @@ public class PPRRRegDownloader extends Application {
             } else {
                 logger.debug("{} is not a valid directory path", newValue);
                 pane1OkayToGo.setValue(false);
-                raceName.setText("");
-                raceDate.setText("");
+                raceNameLabel.setText("");
+                raceDateLabel.setText("");
             }
         });
 
@@ -357,15 +376,15 @@ public class PPRRRegDownloader extends Application {
         GridPane.setHalignment(rl, HPos.RIGHT);
 
         page1Grid.add(rl, 0, row);
-        page1Grid.add(raceName, 1, row++);
+        page1Grid.add(raceNameLabel, 1, row++);
         Label rd = new Label("Race Date:");
         GridPane.setHalignment(rd, HPos.RIGHT);
 
         page1Grid.add(rd, 0, row);
-        page1Grid.add(raceDate, 1, row++);
+        page1Grid.add(raceDateLabel, 1, row++);
 
-        GridPane.setHalignment(raceName, HPos.LEFT);
-        GridPane.setHalignment(raceDate, HPos.LEFT);
+        GridPane.setHalignment(raceNameLabel, HPos.LEFT);
+        GridPane.setHalignment(raceDateLabel, HPos.LEFT);
 
         WizardPane page1 = new WizardPane() {
             @Override
@@ -382,14 +401,15 @@ public class PPRRRegDownloader extends Application {
                 // Read in the field list and save any changes to the config
             }
         };
+        wizardPanes.add(page1);
         page1.setHeaderText("Select the PPRRScore Directory");
         page1.setContent(page1Grid);
 
+        //////////////////
         // Wizard Pane 2: RSU Login Information
         // 
         // Username, password
         // onExit, do a login and stash the temp key and secret
-        
         BooleanProperty pane2OkayToGo = new SimpleBooleanProperty(false);
         row = 0;
 
@@ -416,6 +436,14 @@ public class PPRRRegDownloader extends Application {
         validateHBox.setSpacing(4);
         page2Grid.add(validateHBox, 1, row++);
 
+        // If the username or password fields change, force a re-validation
+        rsuUsernameTextField.textProperty().addListener((observable, oldValue, newValue) -> {
+            pane2OkayToGo.setValue(false);
+        });
+        rsuPasswordTextField.textProperty().addListener((observable, oldValue, newValue) -> {
+            pane2OkayToGo.setValue(false);
+        });
+
         validateButton.setOnAction((event) -> {
             StringBuilder postData = new StringBuilder();
             postData.append("email=");
@@ -428,7 +456,6 @@ public class PPRRRegDownloader extends Application {
                     .POST(BodyPublishers.ofString(postData.toString()))
                     .build();
 
-            
             HttpClient client = HttpClient.newHttpClient();
 
             try {
@@ -476,16 +503,291 @@ public class PPRRRegDownloader extends Application {
                 wizard.invalidProperty().unbind();
             }
         };
+        wizardPanes.add(page2);
 
         page2.setContent(page2Grid);
         page2.setHeaderText("RunSignUp Login");
-        
-        
-        // Page 3: RSU Races
-        // https://runsignup.com/Rest/races?tmp_key=rx9KR5gaAZk03emb8KomXwqplfMEA9op&tmp_secret=KSRL1YzegL2o2O09pHWQ7codmJDCWgs7&format=json&events=F&race_headings=F&race_links=F&include_waiver=F&include_multiple_waivers=F&include_event_days=F&include_extra_date_info=F&page=1&results_per_page=50&sort=name+ASC&start_date=2024-05-27&end_date=2024-05-27&only_partner_races=F&search_start_date_only=F&only_races_with_results=F&distance_units=K
 
-        // Setup the Wizard Flow Rules
-        wizard.setFlow(new LinearFlow(page1, page2));
+        // Page 3: Get list of races from RSU 
+        // And prompt the user to select the Race. Snag the race_event_days_id that is between the start_date and end_date for the event
+        row = 0;
+
+        GridPane page3Grid = new GridPane();
+        page3Grid.setVgap(10);
+        page3Grid.setHgap(10);
+
+        record races(String name, Integer raceID, JSONObject details) {
+
+            @Override
+            public String toString() {
+                return name;
+            }
+        }
+
+        ObservableList<races> raceList = FXCollections.observableArrayList();
+        ListView<races> raceListView = new ListView(raceList);
+        raceListView.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+
+        raceListView.setPrefHeight(250);
+        raceListView.setMinHeight(250);
+        raceListView.setMaxWidth(Double.MAX_VALUE);
+        GridPane.setHgrow(raceListView, Priority.ALWAYS);
+
+        page3Grid.add(raceListView, 0, row);
+
+        setupData.put("race_event_days_id", 0);
+        raceListView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue == null) {
+                return;
+            }
+            LocalDate raceDate = LocalDate.parse(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"), DateTimeFormatter.ofPattern("yyyy-M-d"));
+            newValue.details.getJSONArray("race_event_days").forEach((r) -> {
+                if (r instanceof JSONObject eventDays) {
+                    LocalDate eventStart = LocalDate.parse(eventDays.getString("start_date"), DateTimeFormatter.ofPattern("M/d/yyyy 00:00"));
+                    LocalDate eventEnd = LocalDate.parse(eventDays.getString("end_date"), DateTimeFormatter.ofPattern("M/d/yyyy 00:00"));
+                    Integer raceEventDaysId = eventDays.getInt("race_event_days_id");
+                    if (eventStart.compareTo(raceDate) <= 0 && eventEnd.compareTo(raceDate) >= 0) {
+                        logger.debug("Event Days: {} ({}) is between {} and {}", raceDate, raceEventDaysId, eventStart, eventEnd);
+                        setupData.put("race_event_days_id", raceEventDaysId);
+                        setupData.put("race_id", newValue.raceID);
+                    } else {
+                        logger.debug("Event Days: {} ({}) is NOT between {} and {}", raceDate, raceEventDaysId, eventStart, eventEnd);
+                    }
+                }
+            });
+        });
+
+        final WizardPane page3 = new WizardPane() {
+            @Override
+            public void onEnteringPage(Wizard wizard) {
+                wizard.invalidProperty().bind(raceListView.getSelectionModel().selectedItemProperty().isNull());
+
+                raceList.clear();
+
+                // get the list of from RSU
+                // https://runsignup.com/Rest/races?
+                // tmp_key=KEY&tmp_secret=SECRET
+                // &format=json&include_event_days=F&page=1&results_per_page=50&sort=name+ASC
+                // &start_date=2024-05-27&end_date=2024-05-27
+                StringBuilder requestURL = new StringBuilder();
+                requestURL.append("https://runsignup.com/Rest/races");
+                requestURL.append("?tmp_key=").append(setupData.get("rsuTempKey"));
+                requestURL.append("&tmp_secret=").append(setupData.get("rsuTempSecret"));
+                requestURL.append("&format=json").append("&include_event_days=T");
+                requestURL.append("&page=1&results_per_page=50&sort=name+ASC");
+                requestURL.append("&start_date=").append(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
+                requestURL.append("&end_date=").append(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
+
+                logger.debug("RSU Get Races Request URL: {}", requestURL.toString());
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(requestURL.toString()))
+                        .build();
+
+                HttpClient client = HttpClient.newHttpClient();
+
+                try {
+                    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                    logger.debug("RSU Response: {} ", response.body());
+
+                    if (response.statusCode() == 200) {
+                        JSONObject rsuResponse = new JSONObject(response.body());
+                        if (rsuResponse.has("races")) {
+                            rsuResponse.getJSONArray("races").forEach((r) -> {
+                                if (r instanceof JSONObject rObj) {
+                                    JSONObject race = rObj.getJSONObject("race"); // FFS
+                                    races raceRecord = new races(URLDecoder.decode(race.getString("name"), StandardCharsets.UTF_8), race.getInt("race_id"), race);
+                                    logger.debug("Found Race: {} ({})", URLDecoder.decode(race.getString("name"), StandardCharsets.UTF_8), race.getInt("race_id"));
+                                    raceList.add(raceRecord);
+                                }
+                            });
+                        } else {
+                            logger.error("Error in RSU Login: {} ", response.body());
+                        }
+                    } else {
+                        logger.error("Error in RSU Login: {} ", response.body());
+                    }
+                } catch (Exception ex) {
+                    logger.error("Exception in HttpClient response: ", ex);
+                }
+            }
+
+            @Override
+            public void onExitingPage(Wizard wizard) {
+                wizard.invalidProperty().unbind();
+
+            }
+        };
+        wizardPanes.add(page3);
+
+        page3.setContent(page3Grid);
+        page3.setHeaderText("Select RSU Race");
+
+        ///////////
+        // Page 4: Get the race details based on the race_event_days_id from #3
+        // Filter event_id's based on the start_end times and create event records
+        // Show each event and prompt the user to map each the PPRRScore Division (or set to Ignore)
+        GridPane page4Grid = new GridPane();
+        page4Grid.setVgap(10);
+        page4Grid.setHgap(10);
+
+        // https://runsignup.com/Rest/race/4863
+        // ?tmp_key=V7LlOhvsBQAriLsq8P3aG3xITwaj819R&tmp_secret=b2pjHi20LLAzE11dTRUkUantIPFjHmQy
+        // &format=json&future_events_only=F&most_recent_events_only=F
+        // &race_event_days_id=283700
+        // &race_headings=F&race_links=F&include_waiver=F&include_multiple_waivers=F
+        // &include_participant_caps=F&include_age_based_pricing=F&include_giveaway_details=T
+        //&include_questions=T&include_addons=F&include_membership_settings=F
+        //&include_corral_settings=F&include_donation_settings=F&include_extra_date_info=T
+        // build up the list of available questions for step 5
+        record event(String Name, Integer eventID, StringProperty div) {
+
+        }
+
+        ObservableList<event> eventList = FXCollections.observableArrayList();
+
+        TableView<event> eventTable = new TableView(eventList);
+        eventTable.setEditable(true);
+        eventTable.setPrefHeight(250);
+        eventTable.setMinHeight(250);
+        eventTable.setMaxWidth(Double.MAX_VALUE);
+        GridPane.setHgrow(eventTable, Priority.ALWAYS);
+
+        TableColumn<event, String> eventNameTablecolumn = new TableColumn<>("Event");
+        eventNameTablecolumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().Name));
+
+        TableColumn<event, String> divisionTableColumn = new TableColumn<>("PPRRScore Division");
+        divisionTableColumn.setCellValueFactory(cellData -> cellData.getValue().div);
+        divisionTableColumn.setEditable(true);
+
+        eventTable.getColumns().add(eventNameTablecolumn);
+        eventTable.getColumns().add(divisionTableColumn);
+
+        page4Grid.add(eventTable, 0, 0);
+
+        final WizardPane page4 = new WizardPane() {
+            @Override
+            public void onEnteringPage(Wizard wizard) {
+
+                // List of possible divisions from PPRRScore: 
+                List<String> pprrscoreDivisions = new ArrayList();
+
+                setupData.getJSONObject("PPRRScoreFieldList").getJSONArray("Division").iterator().forEachRemaining(e -> {
+                    if (e instanceof String div) {
+                        pprrscoreDivisions.add(div);
+                    }
+                });
+                pprrscoreDivisions.add("IGNORE");
+
+                // Setup the cell factory for the divisions
+                divisionTableColumn.setCellFactory(tc -> {
+                    ComboBox<String> combo = new ComboBox<>();
+                    combo.getItems().addAll(pprrscoreDivisions);
+                    TableCell<event, String> cell = new TableCell<event, String>() {
+                        @Override
+                        protected void updateItem(String reason, boolean empty) {
+                            super.updateItem(reason, empty);
+                            if (empty) {
+                                setGraphic(null);
+                            } else {
+                                combo.setValue(reason);
+                                setGraphic(combo);
+                            }
+                        }
+                    };
+                    combo.setOnAction(e -> {
+                        tc.getTableView().getItems().get(cell.getIndex()).div.setValue(combo.getValue());
+                    });
+                    return cell;
+                });
+
+                eventList.clear();
+
+                // get the Race Details from RSU
+                // https://runsignup.com/Rest/race/4863
+                // ?tmp_key=V7LlOhvsBQAriLsq8P3aG3xITwaj819R&tmp_secret=b2pjHi20LLAzE11dTRUkUantIPFjHmQy
+                // &format=json&future_events_only=F&most_recent_events_only=F
+                // &race_event_days_id=283700
+                // &race_headings=F&race_links=F&include_waiver=F&include_multiple_waivers=F
+                // &include_participant_caps=F&include_age_based_pricing=F&include_giveaway_details=T
+                //&include_questions=T&include_addons=F&include_membership_settings=F
+                //&include_corral_settings=F&include_donation_settings=F&include_extra_date_info=T
+                StringBuilder requestURL = new StringBuilder();
+                requestURL.append("https://runsignup.com/Rest/race/");
+                requestURL.append(setupData.get("race_id"));
+                requestURL.append("?tmp_key=").append(setupData.get("rsuTempKey"));
+                requestURL.append("&tmp_secret=").append(setupData.get("rsuTempSecret"));
+                requestURL.append("&format=json").append("&future_events_only=F&most_recent_events_only=F");
+                requestURL.append("&race_event_days_id=").append(setupData.get("race_event_days_id"));
+                requestURL.append("&include_questions=T");
+
+                logger.debug("RSU Get Race Request URL: {}", requestURL.toString());
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(requestURL.toString()))
+                        .build();
+
+                HttpClient client = HttpClient.newHttpClient();
+
+                try {
+                    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                    logger.debug("RSU Response: {} ", response.body());
+
+                    if (response.statusCode() == 200) {
+                        JSONObject rsuResponse = new JSONObject(response.body());
+                        if (rsuResponse.has("race")) {
+                            LocalDate raceDate = LocalDate.parse(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"), DateTimeFormatter.ofPattern("yyyy-M-d"));
+                            rsuResponse.getJSONObject("race").getJSONArray("events").forEach((r) -> {
+                                if (r instanceof JSONObject event) {
+                                    LocalDate eventStart = LocalDate.parse(event.getString("start_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
+                                    LocalDate eventEnd = LocalDate.parse(event.getString("end_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
+                                    if (eventStart.compareTo(raceDate) <= 0 && eventEnd.compareTo(raceDate) >= 0) {
+                                        event eventRecord = new event(URLDecoder.decode(event.getString("name"), StandardCharsets.UTF_8), event.getInt("event_id"), new SimpleStringProperty("IGNORE"));
+                                        // TODO: use event -> Div map for the event division
+                                        logger.debug("Found Event: {} ({})", URLDecoder.decode(event.getString("name"), StandardCharsets.UTF_8), event.getInt("event_id"));
+                                        eventList.add(eventRecord);
+                                    } else {
+                                        logger.debug("Event {} ({}) is NOT on {}", event.getString("name"), event.getInt("event_id"), eventStart, eventEnd);
+                                    }
+                                }
+                            });
+                        } else {
+                            logger.error("Error in RSU Login: {} ", response.body());
+                        }
+                    } else {
+                        logger.error("Error in RSU Login: {} ", response.body());
+                    }
+                } catch (Exception ex) {
+                    logger.error("Exception in HttpClient response: ", ex);
+                }
+            }
+
+            @Override
+            public void onExitingPage(Wizard wizard) {
+                wizard.invalidProperty().unbind();
+                eventList.forEach(e -> logger.debug(" Event: {} -> {}", e.Name, e.div.getValue()));
+            }
+        };
+        wizardPanes.add(page4);
+
+        page4.setContent(page4Grid);
+        page4.setHeaderText("Select RSU Race");
+
+        /////////////////////////////////
+        // Page 5: Map the RSU attributes 
+        // For each registration attribute, select an RSU source (native registration field or question/givaway source if available)
+        // Set all of the panes to the same height to make this a bit nicer
+//        Double width = page1.getWidth();
+//        Double height = page1.getHeight();
+//        for (WizardPane p : wizardPanes) {
+//            width = (width > p.getWidth()) ? width : p.getWidth();
+//            height = (height > p.getHeight()) ? height : p.getHeight();
+//        }
+        for (WizardPane p : wizardPanes) {
+            p.setMinSize(600, 400);
+        }
+
+        wizard.setFlow(new LinearFlow(wizardPanes));
 
         // show wizard and wait for response
         wizard.showAndWait();
