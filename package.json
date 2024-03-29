@@ -1,0 +1,28 @@
+{
+    "bin": {"pprrregdownloader": "jdeploy-bundle/jdeploy.js"},
+    "author": "John Garner",
+    "description": "Download RunSignUp registrations to PPRRScore",
+    "main": "index.js",
+    "preferGlobal": true,
+    "repository": "",
+    "version": "1.0.0",
+    "jdeploy": {
+        "jdk": false,
+        "args": ["--add-opens javafx.graphics/javafx.scene=org.controlsfx.controls"],
+        "javaVersion": "21",
+        "jar": "target/PPRRRegDownloader-0.5.jar",
+        "javafx": true,
+        "title": "PPRRRegDownloader"
+    },
+    "dependencies": {
+        "command-exists-promise": "^2.0.2",
+        "node-fetch": "2.6.7",
+        "tar": "^4.4.8",
+        "yauzl": "^2.10.0",
+        "shelljs": "^0.8.4"
+    },
+    "license": "ISC",
+    "name": "PPRRRegDownloader",
+    "files": ["jdeploy-bundle"],
+    "scripts": {"test": "echo \"Error: no test specified\" && exit 1"}
+}
