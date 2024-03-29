@@ -234,9 +234,8 @@ public class PPRRRegDownloader extends Application {
     }
 
     private void saveRegToFile() {
-        String year = mainConfig.getString("event_date").substring(0, mainConfig.getString("event_date").indexOf("-"));
 
-        Path regFile = Paths.get(mainConfig.get("PPRRScoreDir") + "/Regs/" + year + mainConfig.getString("RegFile"));
+        Path regFile = Paths.get(mainConfig.get("PPRRScoreDir") + "/Regs/" + mainConfig.getString("RegFile"));
         logger.debug("Saving Registrations to " + regFile.toString());
 
         List<String> output = new ArrayList();
