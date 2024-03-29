@@ -6,4 +6,5 @@ module org.pprrun.pprrregdownloader {
     requires org.controlsfx.controls;
     requires org.json;
     requires  org.slf4j;
+    requires org.apache.commons.lang3;
 }

@@ -62,6 +62,8 @@ public class UserPrefs {
         prefs.put("RSUPassword", HexFormat.of().formatHex(password.getBytes()));
     }
     
+    // Uber simple obfuscation. 
+    // Don't rely on this to actually protect your password.
     public String getRSUPassword(){
         if (!"".equals(prefs.get("RSUPassword",""))){
             return new String(HexFormat.of().parseHex(prefs.get("RSUPassword","")));

@@ -63,6 +63,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * JavaFX PPRRRegDownloader
@@ -85,10 +86,8 @@ public class PPRRRegDownloader extends Application {
     }
     ;
     
-    ObservableList<Registration> registrationList = FXCollections.observableArrayList();
-    TableView<Registration> registrationsTableView = new TableView(registrationList);
-
-    private static final ObservableList<Registration> regList = FXCollections.observableArrayList();
+    private static final ObservableList<Registration> registrationList = FXCollections.observableArrayList();
+    private static final TableView<Registration> registrationsTableView = new TableView(registrationList);
 
     //private Preferences prefs = Preferences.getInstance();
     @Override
@@ -153,9 +152,9 @@ public class PPRRRegDownloader extends Application {
         grid.add(registrationsTableView, 0, row++);
 
         // Bottom Bar
-        Button refreshButton = new Button("Refresh");
+        Button refreshButton = new Button("Refresh from RSU");
         refreshButton.setOnAction(event -> downloadReg());
-        Button saveButton = new Button("Save");
+        Button saveButton = new Button("Save to AllReg");
         saveButton.setOnAction(event -> saveRegToFile());
 
         Pane spring2 = new Pane();
@@ -190,6 +189,8 @@ public class PPRRRegDownloader extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
 
+        showSetupWizard();
+
     }
 
     public static void main(String[] args) {
@@ -199,15 +200,40 @@ public class PPRRRegDownloader extends Application {
     private void saveRegToFile() {
         String year = mainConfig.getString("event_date").substring(0, mainConfig.getString("event_date").indexOf("-"));
 
-        Path regFile = Paths.get(mainConfig.get("PPRRScoreDir") + "/Regs/" + year + mainConfig.getString("event_name_short") + "AllRegistrations.csv");
+        Path regFile = Paths.get(mainConfig.get("PPRRScoreDir") + "/Regs/" + year + mainConfig.getString("event_name_short") + "AllRegistrations-new.csv");
         logger.debug("Saving Registrations to " + regFile.toString());
 
-//        try {
-//            // Save the mapping config to the rsuDownloader.json file in the PPRRScore race directory
-//            Files.write(regFile, rsuConfig.toString(4).getBytes(), StandardOpenOption.TRUNCATE_EXISTING);
-//        } catch (IOException ex) {
-//            logger.error("ERROR: Unable to write to {}", regFile.toString());
-//        }
+        List<String> output = new ArrayList();
+        List<String> fieldlist = new ArrayList();
+
+        // Headder line
+        StringBuilder line = new StringBuilder();
+        mainConfig.getJSONArray("fieldlist").forEach(f -> {
+            if (f instanceof String x) {
+                line.append(x).append(",");
+                fieldlist.add(x);
+            }
+
+        });
+        output.add(line.toString().substring(0, line.length() - 1));
+
+        registrationList.forEach(r -> {
+            StringBuilder reg = new StringBuilder();
+            fieldlist.forEach(f -> {
+                reg.append(r.getVal(f)).append(",");
+            });
+            output.add(StringUtils.stripAccents(reg.toString().substring(0, reg.length() - 1)));
+
+        });
+
+        try {
+            // Save registration data to the allreg file
+
+            Files.write(regFile, output);
+        } catch (IOException ex) {
+            logger.error("ERROR: Unable to write to {}", regFile.toString(), ex);
+        }
+
     }
 
     private void setupTableColumns() {
@@ -221,9 +247,7 @@ public class PPRRRegDownloader extends Application {
                 registrationsTableView.getColumns().add(newTC);
             }
         });
-
         registrationsTableView.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_SUBSEQUENT_COLUMNS);
-
     }
 
     private void updateRSUKeys() {
@@ -320,11 +344,13 @@ public class PPRRRegDownloader extends Application {
                                                 Registration r = new Registration(new HashMap());
                                                 r.fieldlist.put("Div", div);
 
-//                                                // Basic RSU Attributes
-//                                                rsuAttributesList.addAll(Arrays.asList("First_Name", "Middle_Name", "Last_Name"));
-//                                                rsuAttributesList.addAll(Arrays.asList("Gender", "Age", "DOB", "Bib"));
-//                                                rsuAttributesList.addAll(Arrays.asList("City", "State", "Country"));
-//                                                rsuAttributesList.addAll(Arrays.asList("EMail", "Giveaway", "isAnonymous", "Team_Name"));
+                                                // Basic RSU Attributes
+                                                // ("First_Name", "Middle_Name", "Last_Name"));
+                                                // ("Gender", "Age", "DOB", "Bib"));
+                                                // ("City", "State", "Country"));
+                                                // ("EMail", "Giveaway", "isAnonymous", "Team_Name"));
+                                                //
+                                                // Questions are numbers, so we will look them up as a 'default' case
                                                 fieldlistMap.keySet().forEach(k -> {
                                                     if (fieldlistMap.get(k) instanceof String source) {
                                                         switch (source) {
@@ -340,7 +366,7 @@ public class PPRRRegDownloader extends Application {
                                                                 r.fieldlist.put(k, rsuReg.optString("bib_num"));
                                                             case "Age" ->
                                                                 r.fieldlist.put(k, rsuReg.optString("age"));
-                                                            case "DOB" ->
+                                                            case "Date_of_Birth" ->
                                                                 r.fieldlist.put(k, fixDOB(rsuReg.getJSONObject("user").optString("dob")));
                                                             case "Gender" ->
                                                                 r.fieldlist.put(k, fixGender(rsuReg.getJSONObject("user").optString("gender")));
@@ -355,14 +381,34 @@ public class PPRRRegDownloader extends Application {
                                                             case "Team_Name" ->
                                                                 r.fieldlist.put(k, rsuReg.optString("team_name"));
                                                             case "isAnonymous" ->
-                                                                r.fieldlist.put(k, rsuReg.getJSONObject("user").optString("is_anonymous"));
+                                                                r.fieldlist.put(k, "F".equals(rsuReg.getJSONObject("user").optString("is_anonymous")) ? "No" : "Yes");
+                                                            case "Registration_ID" ->
+                                                                r.fieldlist.put(k, rsuReg.optString("registration_id"));
+                                                            case "BLANK" -> {
+                                                            }
+                                                            default -> {
+                                                                logger.debug("Question lookup for question ID {}", source);
+                                                                if (rsuReg.has("question_responses")) {
+                                                                    JSONArray responses = rsuReg.getJSONArray("question_responses");
+                                                                    responses.forEach(qr -> {
+                                                                        if (qr instanceof JSONObject q) {
+                                                                            logger.debug("The response is a JSONObject...");
+                                                                            if (source.equals(q.optString("question_text"))) {
+                                                                                logger.debug("We have a matching question");
+                                                                                r.fieldlist.put(k, q.optString("response"));
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }
+                                                                //}
+                                                            }
                                                         }
                                                     }
                                                 });
 
                                                 Platform.runLater(() -> {
-                                                    logger.debug("Added registration to registrationList: ");
-                                                    r.fieldlist.keySet().forEach(k -> logger.debug("  {} -> {}", k, r.fieldlist.get(k)));
+                                                    //logger.debug("Added registration to registrationList: ");
+                                                    //r.fieldlist.keySet().forEach(k -> logger.debug("  {} -> {}", k, r.fieldlist.get(k)));
                                                     registrationList.add(r);
                                                 });
                                             }
@@ -381,14 +427,10 @@ public class PPRRRegDownloader extends Application {
                                 }
                             } catch (Exception ex) {
                                 logger.error("Exception in HttpClient response: ", ex);
-
                             }
-
                         } while (regReturned >= 1000);
-
                     } catch (Exception ex) {
                         logger.debug("RSU sync Exception: " + ex.getMessage());
-                        ex.printStackTrace();
                     }
                 }
             });
@@ -407,6 +449,23 @@ public class PPRRRegDownloader extends Application {
         // Page 4: Map RSU Event -> Div
         // Page 5: Map RSU Attributes to the registration field list
 
+        // Default RSU -> PPRRScore mappings
+        Map<String, String> defaultMappings = new HashMap();
+        defaultMappings.put("FirstName", "First_Name");
+        defaultMappings.put("MiddleName", "Middle_Name");
+        defaultMappings.put("LastName", "Last_Name");
+        defaultMappings.put("Sex", "Gender");
+        defaultMappings.put("Age", "Age");
+        defaultMappings.put("DateOfBirth", "Date_of_Birth");
+        defaultMappings.put("City", "City");
+        defaultMappings.put("St", "State");
+        defaultMappings.put("Country", "Country");
+        defaultMappings.put("E-Mail", "EMail");
+        defaultMappings.put("Anonymous", "isAnonymous");
+        defaultMappings.put("Swag", "Giveaway");
+        defaultMappings.put("Bib", "Bib");
+        defaultMappings.put("RegID", "Registration_ID");
+
         // Wizard variables
         final JSONObject setupData = new JSONObject();
         final Map<Integer, String> eventDivisionMap = new HashMap();
@@ -414,7 +473,7 @@ public class PPRRRegDownloader extends Application {
         List<WizardPane> wizardPanes = new ArrayList();
 
         Wizard wizard = new Wizard();
-        wizard.setTitle("Setup");
+        wizard.setTitle("Setup RSU Downloader");
 
         BooleanProperty pane1OkayToGo = new SimpleBooleanProperty(false);
 
@@ -463,9 +522,6 @@ public class PPRRRegDownloader extends Application {
                         raceDateLabel.setText(fieldList.getString("EventDate"));
 
                         break;
-                    } else if (s.equals("rsuDownloaderConfig.json")) {
-                        // open the rsuDownloaderConfig.json file 
-                        //setupData.put("rsuConfig", Files.lines(sdaf));
                     }
                 }
             } else {
@@ -519,6 +575,24 @@ public class PPRRRegDownloader extends Application {
                 wizard.invalidProperty().unbind();
                 // If there is an existing app config, read it in
 
+                Path downloaderConf = Paths.get(setupData.get("PPRRScoreDir") + "/Config/rsuDownloader.json");
+                if (downloaderConf.toFile().canRead()) {
+                    try {
+                        JSONObject confFile = new JSONObject(Files.readString(downloaderConf));
+                        logger.debug("Existing conf file: {}", confFile.toString(4));
+                        if (confFile.has("fieldlist_mapping")) {
+                            JSONObject map = confFile.getJSONObject("fieldlist_mapping");
+                            map.keySet().forEach(k -> {
+                                defaultMappings.put(k, map.optString(k));
+                                logger.debug("Setting default fieldlist map {} -> {}",k,map.optString(k));
+                            }); 
+                        }
+                        confFile.keySet().forEach(k -> setupData.put(k, confFile.get(k)));
+                        logger.debug("Loaded initial config from {}", downloaderConf.toString());
+                    } catch (IOException ex) {
+                        logger.error("Unable to read {}", downloaderConf.toString(), ex);
+                    }
+                }
             }
         };
         wizardPanes.add(page1);
@@ -726,6 +800,15 @@ public class PPRRRegDownloader extends Application {
                                     raceList.add(raceRecord);
                                 }
                             });
+
+                            if (setupData.has("race_id")) {
+                                Integer raceID = setupData.getInt("race_id");
+                                raceList.forEach(r -> {
+                                    if (raceID.equals(r.raceID)) {
+                                        raceListView.getSelectionModel().select(r);
+                                    }
+                                });
+                            }
                         } else {
                             logger.error("Error in RSU Login: {} ", response.body());
                         }
@@ -797,6 +880,13 @@ public class PPRRRegDownloader extends Application {
                 });
                 pprrscoreDivisions.add("IGNORE");
 
+                // Read in the existing event_mapping to a map
+                Map<Integer, String> eventMap = new HashMap();
+                JSONObject map = setupData.getJSONObject("event_mapping");
+                map.keySet().forEach(k -> {
+                    eventMap.put(Integer.valueOf(k), map.optString(k));
+                });
+
                 // Setup the cell factory for the divisions
                 divisionTableColumn.setCellFactory(tc -> {
                     ComboBox<String> combo = new ComboBox<>();
@@ -853,8 +943,12 @@ public class PPRRRegDownloader extends Application {
                                     LocalDate eventStart = LocalDate.parse(event.getString("start_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
                                     LocalDate eventEnd = LocalDate.parse(event.getString("end_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
                                     if (eventStart.compareTo(raceDate) <= 0 && eventEnd.compareTo(raceDate) >= 0) {
-                                        // TODO: use event -> Div map for the initial division setting
                                         event eventRecord = new event(URLDecoder.decode(event.getString("name"), StandardCharsets.UTF_8), event.getInt("event_id"), new SimpleStringProperty("IGNORE"));
+
+                                        if (eventMap.containsKey(event.getInt("event_id"))) {
+                                            eventRecord.div.setValue(eventMap.get(eventRecord.eventID));
+                                        }
+
                                         logger.debug("Found Event: {} ({})", URLDecoder.decode(event.getString("name"), StandardCharsets.UTF_8), event.getInt("event_id"));
                                         eventList.add(eventRecord);
                                     } else {
@@ -943,10 +1037,11 @@ public class PPRRRegDownloader extends Application {
 
                 // Setup the PPRRScore attributes that we need to map
                 setupData.getJSONObject("PPRRScoreFieldList").getJSONArray("RegFields").iterator().forEachRemaining(e -> {
-
                     if (e instanceof String regField) {
                         if (!"Div".equals(regField)) {
-                            regAttributeList.add(new regAttribute(regField, new SimpleStringProperty("BLANK")));
+                            String def = defaultMappings.containsKey(regField)?defaultMappings.get(regField):"BLANK";
+                            logger.debug("Setting {} to {}",regField,def);
+                            regAttributeList.add(new regAttribute(regField, new SimpleStringProperty(def)));
                         }
                     }
                 });
@@ -956,9 +1051,9 @@ public class PPRRRegDownloader extends Application {
 
                 // Basic RSU Attributes
                 rsuAttributesList.addAll(Arrays.asList("First_Name", "Middle_Name", "Last_Name"));
-                rsuAttributesList.addAll(Arrays.asList("Gender", "Age", "DOB", "Gender", "Bib"));
+                rsuAttributesList.addAll(Arrays.asList("Gender", "Age", "Date_of_Birth", "Bib"));
                 rsuAttributesList.addAll(Arrays.asList("City", "State", "Country"));
-                rsuAttributesList.addAll(Arrays.asList("EMail", "Giveaway", "isAnonymous", "Team_Name"));
+                rsuAttributesList.addAll(Arrays.asList("EMail", "Giveaway", "isAnonymous", "Team_Name", "Registration_ID"));
 
                 // Question Responses
                 if (setupData.has("rsuQuestions")) {
@@ -1015,7 +1110,7 @@ public class PPRRRegDownloader extends Application {
         // Showtime....
         //
         for (WizardPane p : wizardPanes) {
-            p.setMinSize(600, 400);
+            p.setMinSize(450, 350);
         }
 
         wizard.setFlow(new LinearFlow(wizardPanes));
@@ -1168,7 +1263,7 @@ public class PPRRRegDownloader extends Application {
     // Fix name/city capitalization for those who SHOUT or don't 
     // know what the shift key does :-/
     public String titleCase(String s) {
-        logger.debug("Entered titleCase({})", s);
+        //logger.debug("Entered titleCase({})", s);
         if (s == null || s.isEmpty()) {
             return "";
         }
@@ -1179,7 +1274,7 @@ public class PPRRRegDownloader extends Application {
             if (n.length() == 2) {
                 n = upperIfNoVowel(n);
             }
-            logger.debug("titleCase() Changed: " + s + " -> " + n);
+            //logger.debug("titleCase() Changed: " + s + " -> " + n);
             return n;
         }
         return s;
@@ -1224,7 +1319,7 @@ public class PPRRRegDownloader extends Application {
 
     private String fixDOB(String dob) {
         String[] d = dob.split("-");
-        return d[1] + "/" + d[2] + "/" + d[3];
+        return d[1] + "/" + d[2] + "/" + d[0];
     }
 
     private String fixGender(String gend) {
