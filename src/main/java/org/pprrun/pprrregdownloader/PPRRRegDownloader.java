@@ -38,6 +38,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
@@ -234,7 +236,7 @@ public class PPRRRegDownloader extends Application {
     private void saveRegToFile() {
         String year = mainConfig.getString("event_date").substring(0, mainConfig.getString("event_date").indexOf("-"));
 
-        Path regFile = Paths.get(mainConfig.get("PPRRScoreDir") + "/Regs/" + year + mainConfig.getString("event_name_short") + "AllRegistrations-new.csv");
+        Path regFile = Paths.get(mainConfig.get("PPRRScoreDir") + "/Regs/" + year + mainConfig.getString("RegFile"));
         logger.debug("Saving Registrations to " + regFile.toString());
 
         List<String> output = new ArrayList();
@@ -264,6 +266,12 @@ public class PPRRRegDownloader extends Application {
             // Save registration data to the allreg file
 
             Files.write(regFile, output);
+            Alert alert = new Alert(AlertType.INFORMATION);
+            alert.setTitle("File Saved");
+            alert.setHeaderText(null);
+            alert.setContentText("Saved registrations to " + regFile.toString());
+
+            alert.showAndWait();
         } catch (IOException ex) {
             logger.error("ERROR: Unable to write to {}", regFile.toString(), ex);
         }
@@ -1225,6 +1233,7 @@ public class PPRRRegDownloader extends Application {
 
                 // Stash the race short name
                 mainConfig.put("event_name_short", setupData.getJSONObject("PPRRScoreFieldList").getString("RacenameShort"));
+                mainConfig.put("RegFile", setupData.getJSONObject("PPRRScoreFieldList").getString("RegFile"));
 
                 // Stash the username and password
                 mainConfig.put("rsuUsername", setupData.get("rsuUsername"));

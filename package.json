@@ -24,7 +24,7 @@
         "yauzl": "^2.10.0",
         "shelljs": "^0.8.4"
     },
-    "license": "ISC",
+    "license": "GPLv3",
     "name": "PPRRRegDownloader",
     "files": ["jdeploy-bundle"],
     "scripts": {"test": "echo \"Error: no test specified\" && exit 1"}
