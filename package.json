@@ -8,7 +8,10 @@
     "version": "1.0.0",
     "jdeploy": {
         "jdk": false,
-        "args": ["--add-opens javafx.graphics/javafx.scene=org.controlsfx.controls"],
+        "args": [
+            "--add-opens javafx.graphics/javafx.scene=org.controlsfx.controls",
+            "--add-opens javafx.graphics/javafx.scene=ALL-UNNAMED"
+        ],
         "javaVersion": "21",
         "jar": "target/PPRRRegDownloader-1.0-uber.jar",
         "javafx": true,

@@ -76,17 +76,17 @@ import org.apache.commons.lang3.StringUtils;
  * JavaFX PPRRRegDownloader
  */
 public class PPRRRegDownloader extends Application {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(PPRRRegDownloader.class);
     private static final UserPrefs userPrefs = UserPrefs.getInstance();
     private static final JSONObject mainConfig = new JSONObject();
-    
+
     private static final StringProperty eventName = new SimpleStringProperty("TBD");
     private static final StringProperty eventDate = new SimpleStringProperty("TBD");
 
     //private static Stage mainStage;
     record Registration(Map<String, String> fieldlist, String searchString) {
-        
+
         String getVal(String attr) {
             return fieldlist.containsKey(attr) ? fieldlist.get(attr) : "";
         }
@@ -102,12 +102,12 @@ public class PPRRRegDownloader extends Application {
     @Override
     public void start(Stage primaryStage) {
         JSONObject config = new JSONObject();
-        
+
         primaryStage.setTitle("RSU Reg Downloader");
-        
+
         primaryStage.setWidth(600);
         primaryStage.setHeight(400);
-        
+
         GridPane grid = new GridPane();
         grid.setAlignment(Pos.TOP_CENTER);
         grid.setHgap(10);
@@ -124,7 +124,7 @@ public class PPRRRegDownloader extends Application {
         RowConstraints rc3 = new RowConstraints();
         rc3.setVgrow(Priority.ALWAYS);
         grid.getRowConstraints().addAll(rc0, rc1, rc2, rc3);
-        
+
         int row = 0;
         // title bar
         Label title = new Label("PPRR Registration Downloader");
@@ -147,7 +147,7 @@ public class PPRRRegDownloader extends Application {
 
         // Action / Search Bar
         Button setupButton = new Button("Setup");
-        
+
         searchTextField.setPrefWidth(200);
         Pane spring1 = new Pane();
         HBox actionHBox = new HBox(setupButton, spring1, new Label("Search:"), searchTextField);
@@ -163,7 +163,7 @@ public class PPRRRegDownloader extends Application {
         HBox counterHBox = new HBox(filteredSizeLabel, new Label("/"), listSizeLabel);
         counterHBox.setSpacing(1);
         counterHBox.setAlignment(Pos.CENTER_RIGHT);
-        
+
         VBox tableVBox = new VBox(registrationsTableView, counterHBox);
         grid.add(tableVBox, 0, row++);
 
@@ -172,15 +172,15 @@ public class PPRRRegDownloader extends Application {
         refreshButton.setOnAction(event -> downloadReg());
         Button saveButton = new Button("Save to AllReg");
         saveButton.setOnAction(event -> saveRegToFile());
-        
+
         Pane spring2 = new Pane();
         HBox.setHgrow(spring2, Priority.ALWAYS);
-        
+
         HBox bottomHBox = new HBox(refreshButton, spring2, saveButton);
         grid.add(bottomHBox, 0, row++);
-        
+
         Scene scene = new Scene(grid);
-        
+
         Rectangle2D primaryScreenBounds = Screen.getPrimary().getVisualBounds();
 
         //set Stage boundaries so that the main screen is centered.                
@@ -219,24 +219,24 @@ public class PPRRRegDownloader extends Application {
         // Action setup
         // Setup Button
         setupButton.setOnAction((event) -> showSetupWizard());
-        
+
         primaryStage.setScene(scene);
         primaryStage.show();
-        
+
         showSetupWizard();
-        
+
     }
-    
+
     public static void main(String[] args) {
         launch();
     }
-    
+
     private void saveRegToFile() {
         String year = mainConfig.getString("event_date").substring(0, mainConfig.getString("event_date").indexOf("-"));
-        
+
         Path regFile = Paths.get(mainConfig.get("PPRRScoreDir") + "/Regs/" + year + mainConfig.getString("event_name_short") + "AllRegistrations-new.csv");
         logger.debug("Saving Registrations to " + regFile.toString());
-        
+
         List<String> output = new ArrayList();
         List<String> fieldlist = new ArrayList();
 
@@ -247,19 +247,19 @@ public class PPRRRegDownloader extends Application {
                 line.append(x).append(",");
                 fieldlist.add(x);
             }
-            
+
         });
         output.add(line.toString().substring(0, line.length() - 1));
-        
+
         registrationList.forEach(r -> {
             StringBuilder reg = new StringBuilder();
             fieldlist.forEach(f -> {
                 reg.append(r.getVal(f)).append(",");
             });
             output.add(StringUtils.stripAccents(reg.toString().substring(0, reg.length() - 1)));
-            
+
         });
-        
+
         try {
             // Save registration data to the allreg file
 
@@ -267,13 +267,13 @@ public class PPRRRegDownloader extends Application {
         } catch (IOException ex) {
             logger.error("ERROR: Unable to write to {}", regFile.toString(), ex);
         }
-        
+
     }
-    
+
     private void setupTableColumns() {
         // Clear the existing table columns
         registrationsTableView.getColumns().clear();
-        
+
         mainConfig.getJSONArray("fieldlist").forEach(s -> {
             if (s instanceof String col) {
                 TableColumn<Registration, String> newTC = new TableColumn<>(col);
@@ -283,13 +283,13 @@ public class PPRRRegDownloader extends Application {
         });
         registrationsTableView.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_SUBSEQUENT_COLUMNS);
     }
-    
+
     private void updateFilterPredicate() {
         logger.debug("updateFilterPredicate: {}", searchTextField.textProperty().getValueSafe());
-        
+
         // I have zero idea why I need to clear it for it to work
         filteredRegistrationList.setPredicate(reg -> true);
-        
+
         filteredRegistrationList.setPredicate(reg -> {
             // If filter text is empty, display all persons.
             if (searchTextField.textProperty().getValueSafe().isEmpty()) {
@@ -300,24 +300,24 @@ public class PPRRRegDownloader extends Application {
             String lowerCaseFilter = "(.*)(" + searchTextField.textProperty().getValueSafe() + ")(.*)";
             try {
                 Pattern pattern = Pattern.compile(lowerCaseFilter, Pattern.CASE_INSENSITIVE);
-                
+
                 if (pattern.matcher(reg.searchString).matches()) {
                     logger.debug("{} matches {}", lowerCaseFilter, reg.searchString);
                     return true; // Filter matches first/last/bib.
                 } else {
                     logger.debug("{} does not match {}", lowerCaseFilter, reg.searchString);
                 }
-                
+
             } catch (PatternSyntaxException e) {
-                logger.debug("Pattern exception ",e);
+                logger.debug("Pattern exception ", e);
                 return true;
             }
             return false; // Does not match.
         });
     }
-    
+
     private void updateRSUKeys() {
-        
+
         StringBuilder postData = new StringBuilder();
         postData.append("email=");
         postData.append(URLEncoder.encode(mainConfig.getString("rsuUsername"), StandardCharsets.UTF_8));
@@ -328,16 +328,16 @@ public class PPRRRegDownloader extends Application {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(BodyPublishers.ofString(postData.toString()))
                 .build();
-        
+
         HttpClient client = HttpClient.newHttpClient();
-        
+
         try {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            
+
             if (response.statusCode() == 200) {
                 JSONObject rsuResponse = new JSONObject(response.body());
                 if (rsuResponse.has("tmp_key")) {
-                    
+
                     logger.debug("updateRSUKeys -> RSU Response: {}", response.body());
                     mainConfig.put("rsuTempKey", rsuResponse.get("tmp_key"));
                     mainConfig.put("rsuTempSecret", rsuResponse.get("tmp_secret"));
@@ -350,10 +350,10 @@ public class PPRRRegDownloader extends Application {
             }
         } catch (Exception ex) {
             logger.error("Exception in HttpClient response: ", ex);
-            
+
         }
     }
-    
+
     private void downloadReg() {
         // clear existing registrations
         registrationList.clear();
@@ -373,11 +373,11 @@ public class PPRRRegDownloader extends Application {
                     logger.info("Getting registrations for {} division (event_id {})", div, event);
                     try {
                         do {
-                            
+
                             if (!mainConfig.has("rsuTempKey")) {
                                 updateRSUKeys();
                             }
-                            
+
                             StringBuilder rsuURL = new StringBuilder();
                             rsuURL.append("https://runsignup.com/Rest/race/").append(mainConfig.get("race_id"));
                             rsuURL.append("/participants?format=json&event_id=").append(event);
@@ -385,19 +385,19 @@ public class PPRRRegDownloader extends Application {
                             rsuURL.append("&include_user_anonymous_flag=T&include_questions=T&include_registration_addons=T&supports_nb=T");
                             rsuURL.append("&tmp_key=").append(mainConfig.get("rsuTempKey"));
                             rsuURL.append("&tmp_secret=").append(mainConfig.get("rsuTempSecret"));
-                            
+
                             logger.debug("Participant request for race_id={} and event_id={}: {}", mainConfig.get("race_id"), event, rsuURL.toString());
                             HttpRequest request = HttpRequest.newBuilder()
                                     .uri(URI.create(rsuURL.toString()))
                                     .build();
-                            
+
                             HttpClient client = HttpClient.newHttpClient();
-                            
+
                             try {
                                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                                
+
                                 if (response.statusCode() == 200) {
-                                    
+
                                     if (response.body().startsWith("[{")) { // We have a json array....
                                         try {
                                             JSONArray results = new JSONArray(response.body()).getJSONObject(0).getJSONArray("participants");
@@ -477,7 +477,7 @@ public class PPRRRegDownloader extends Application {
                                                         }
                                                     }
                                                 });
-                                                
+
                                                 Platform.runLater(() -> {
                                                     registrationList.add(r);
                                                 });
@@ -507,7 +507,7 @@ public class PPRRRegDownloader extends Application {
             });
         });
     }
-    
+
     private void showSetupWizard() {
         // Wizard flow:
         // Page 1: PPRRScore Location
@@ -538,10 +538,10 @@ public class PPRRRegDownloader extends Application {
         final Map<Integer, String> eventDivisionMap = new HashMap();
         final Map<String, String> pprrscoreFieldMap = new HashMap();
         List<WizardPane> wizardPanes = new ArrayList();
-        
+
         Wizard wizard = new Wizard();
         wizard.setTitle("Setup RSU Downloader");
-        
+
         BooleanProperty pane1OkayToGo = new SimpleBooleanProperty(false);
 
         /////////////////////////////////
@@ -555,7 +555,7 @@ public class PPRRRegDownloader extends Application {
         Button targetDirButton = new Button("Select");
         Label raceNameLabel = new Label("");
         Label raceDateLabel = new Label("");
-        
+
         targetDirButton.setOnAction((event) -> {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("PPRRScore Directory");
@@ -569,9 +569,9 @@ public class PPRRRegDownloader extends Application {
                 pprrscoreDirTextField.setText(selectedDirectory.getAbsolutePath());
                 logger.debug("Selected PPRRScoreDir {}", selectedDirectory.getAbsoluteFile());
             }
-            
+
         });
-        
+
         pprrscoreDirTextField.textProperty().addListener((observable, oldValue, newValue) -> {
             logger.debug("pprrscoreDirTextField changed from " + oldValue + " to " + newValue);
             pane1OkayToGo.setValue(false);
@@ -587,7 +587,7 @@ public class PPRRRegDownloader extends Application {
                         setupData.put("PPRRScoreFieldList", fieldList);
                         raceNameLabel.setText(fieldList.optString("Racename"));
                         raceDateLabel.setText(fieldList.getString("EventDate"));
-                        
+
                         break;
                     }
                 }
@@ -598,44 +598,44 @@ public class PPRRRegDownloader extends Application {
                 raceDateLabel.setText("");
             }
         });
-        
+
         pprrscoreDirTextField.setText(userPrefs.getPPRRScoreDir().getAbsolutePath());
-        
+
         int row = 0;
-        
+
         GridPane page1Grid = new GridPane();
         page1Grid.setVgap(10);
         page1Grid.setHgap(10);
-        
+
         Label pd = new Label("PPRRScore Directory:");
         GridPane.setHalignment(pd, HPos.RIGHT);
         page1Grid.add(pd, 0, row);
-        
+
         HBox targetLocationHBox = new HBox(pprrscoreDirTextField, targetDirButton);
         targetLocationHBox.setSpacing(4);
         page1Grid.add(targetLocationHBox, 1, row++);
-        
+
         Label rl = new Label("Race Name:");
         GridPane.setHalignment(rl, HPos.RIGHT);
-        
+
         page1Grid.add(rl, 0, row);
         page1Grid.add(raceNameLabel, 1, row++);
         Label rd = new Label("Race Date:");
         GridPane.setHalignment(rd, HPos.RIGHT);
-        
+
         page1Grid.add(rd, 0, row);
         page1Grid.add(raceDateLabel, 1, row++);
-        
+
         GridPane.setHalignment(raceNameLabel, HPos.LEFT);
         GridPane.setHalignment(raceDateLabel, HPos.LEFT);
-        
+
         WizardPane page1 = new WizardPane() {
             @Override
             public void onEnteringPage(Wizard wizard) {
                 wizard.invalidProperty().bind(pane1OkayToGo.not());
-                
+
             }
-            
+
             @Override
             public void onExitingPage(Wizard wizard) {
                 // Save pprrscoreDir to pprrscoreDir
@@ -652,7 +652,7 @@ public class PPRRRegDownloader extends Application {
                             map.keySet().forEach(k -> {
                                 defaultMappings.put(k, map.optString(k));
                                 logger.debug("Setting default fieldlist map {} -> {}", k, map.optString(k));
-                            });                            
+                            });
                         }
                         confFile.keySet().forEach(k -> setupData.put(k, confFile.get(k)));
                         logger.debug("Loaded initial config from {}", downloaderConf.toString());
@@ -674,24 +674,24 @@ public class PPRRRegDownloader extends Application {
         // onExit, do a login and stash the temp key and secret
         BooleanProperty pane2OkayToGo = new SimpleBooleanProperty(false);
         row = 0;
-        
+
         GridPane page2Grid = new GridPane();
         page2Grid.setVgap(10);
         page2Grid.setHgap(10);
-        
+
         page2Grid.add(new Label("Username:"), 0, row);
         TextField rsuUsernameTextField = createTextField("rsuUsername");
         rsuUsernameTextField.setText(userPrefs.getGlobalPrefs("rsuUsername"));
         GridPane.setHgrow(rsuUsernameTextField, Priority.ALWAYS);
         page2Grid.add(rsuUsernameTextField, 1, row++);
-        
+
         page2Grid.add(new Label("Password:"), 0, row);
         PasswordField rsuPasswordTextField = new PasswordField();
         GridPane.setHgrow(rsuPasswordTextField, Priority.ALWAYS);
         rsuPasswordTextField.setText(userPrefs.getRSUPassword());
         GridPane.setHgrow(rsuPasswordTextField, Priority.ALWAYS);
         page2Grid.add(rsuPasswordTextField, 1, row++);
-        
+
         page2Grid.add(new Label("Status:"), 0, row);
         Button validateButton = new Button("Validate");
         Label loginSuccessLabel = new Label("Unchecked");
@@ -709,7 +709,7 @@ public class PPRRRegDownloader extends Application {
         rsuPasswordTextField.textProperty().addListener((observable, oldValue, newValue) -> {
             pane2OkayToGo.setValue(false);
         });
-        
+
         validateButton.setOnAction((event) -> {
             StringBuilder postData = new StringBuilder();
             postData.append("email=");
@@ -721,19 +721,19 @@ public class PPRRRegDownloader extends Application {
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(BodyPublishers.ofString(postData.toString()))
                     .build();
-            
+
             HttpClient client = HttpClient.newHttpClient();
-            
+
             try {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                
+
                 if (response.statusCode() == 200) {
                     JSONObject rsuResponse = new JSONObject(response.body());
                     if (rsuResponse.has("tmp_key")) {
                         pane2OkayToGo.setValue(true);
                         loginSuccessLabel.setText("Valid");
                         logger.debug("RSU Response: {}", response.body());
-                        
+
                         setupData.put("rsuUsername", rsuUsernameTextField.getText());
                         setupData.put("rsuPassword", rsuPasswordTextField.getText());
                         setupData.put("rsuTempKey", rsuResponse.get("tmp_key"));
@@ -749,58 +749,58 @@ public class PPRRRegDownloader extends Application {
                     pane2OkayToGo.setValue(false);
                     loginSuccessLabel.setText("Invalid Username or Password!");
                 }
-                
+
             } catch (Exception ex) {
                 logger.error("Exception in HttpClient response: ", ex);
                 pane2OkayToGo.setValue(false);
                 loginSuccessLabel.setText("Error in RSU Login Request");
             }
-            
+
         });
-        
+
         final WizardPane page2 = new WizardPane() {
             @Override
             public void onEnteringPage(Wizard wizard) {
                 wizard.invalidProperty().bind(pane2OkayToGo.not());
             }
-            
+
             @Override
             public void onExitingPage(Wizard wizard) {
                 wizard.invalidProperty().unbind();
             }
         };
         wizardPanes.add(page2);
-        
+
         page2.setContent(page2Grid);
         page2.setHeaderText("RunSignUp Login");
 
         // Page 3: Get list of races from RSU 
         // And prompt the user to select the Race. Snag the race_event_days_id that is between the start_date and end_date for the event
         row = 0;
-        
+
         GridPane page3Grid = new GridPane();
         page3Grid.setVgap(10);
         page3Grid.setHgap(10);
-        
+
         record races(String name, Integer raceID, JSONObject details) {
-            
+
             @Override
             public String toString() {
                 return name;
             }
         }
-        
+
         ObservableList<races> raceList = FXCollections.observableArrayList();
         ListView<races> raceListView = new ListView(raceList);
         raceListView.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-        
+
         raceListView.setPrefHeight(250);
         raceListView.setMinHeight(250);
         raceListView.setMaxWidth(Double.MAX_VALUE);
         GridPane.setHgrow(raceListView, Priority.ALWAYS);
-        
+
         page3Grid.add(raceListView, 0, row);
-        
+
         setupData.put("race_event_days_id", 0);
         raceListView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
             if (newValue == null) {
@@ -822,12 +822,12 @@ public class PPRRRegDownloader extends Application {
                 }
             });
         });
-        
+
         final WizardPane page3 = new WizardPane() {
             @Override
             public void onEnteringPage(Wizard wizard) {
                 wizard.invalidProperty().bind(raceListView.getSelectionModel().selectedItemProperty().isNull());
-                
+
                 raceList.clear();
 
                 // get the list of from RSU
@@ -843,19 +843,19 @@ public class PPRRRegDownloader extends Application {
                 requestURL.append("&page=1&results_per_page=50&sort=name+ASC");
                 requestURL.append("&start_date=").append(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
                 requestURL.append("&end_date=").append(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
-                
+
                 logger.debug("RSU Get Races Request URL: {}", requestURL.toString());
-                
+
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(requestURL.toString()))
                         .build();
-                
+
                 HttpClient client = HttpClient.newHttpClient();
-                
+
                 try {
                     HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                     logger.debug("RSU Response: {} ", response.body());
-                    
+
                     if (response.statusCode() == 200) {
                         JSONObject rsuResponse = new JSONObject(response.body());
                         if (rsuResponse.has("races")) {
@@ -867,7 +867,7 @@ public class PPRRRegDownloader extends Application {
                                     raceList.add(raceRecord);
                                 }
                             });
-                            
+
                             if (setupData.has("race_id")) {
                                 Integer raceID = setupData.getInt("race_id");
                                 raceList.forEach(r -> {
@@ -886,15 +886,15 @@ public class PPRRRegDownloader extends Application {
                     logger.error("Exception in HttpClient response: ", ex);
                 }
             }
-            
+
             @Override
             public void onExitingPage(Wizard wizard) {
                 wizard.invalidProperty().unbind();
-                
+
             }
         };
         wizardPanes.add(page3);
-        
+
         page3.setContent(page3Grid);
         page3.setHeaderText("Select RSU Race");
 
@@ -909,37 +909,37 @@ public class PPRRRegDownloader extends Application {
 
         // build up the list of available questions for step 5
         record event(String Name, Integer eventID, StringProperty div) {
-            
+
         }
-        
+
         ObservableList<event> eventList = FXCollections.observableArrayList();
-        
+
         TableView<event> eventTable = new TableView(eventList);
         eventTable.setEditable(true);
         eventTable.setPrefHeight(250);
         eventTable.setMinHeight(250);
         eventTable.setMaxWidth(Double.MAX_VALUE);
         GridPane.setHgrow(eventTable, Priority.ALWAYS);
-        
+
         TableColumn<event, String> eventNameTablecolumn = new TableColumn<>("Event");
         eventNameTablecolumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().Name));
-        
+
         TableColumn<event, String> divisionTableColumn = new TableColumn<>("PPRRScore Division");
         divisionTableColumn.setCellValueFactory(cellData -> cellData.getValue().div);
         divisionTableColumn.setEditable(true);
-        
+
         eventTable.getColumns().add(eventNameTablecolumn);
         eventTable.getColumns().add(divisionTableColumn);
-        
+
         page4Grid.add(eventTable, 0, 0);
-        
+
         final WizardPane page4 = new WizardPane() {
             @Override
             public void onEnteringPage(Wizard wizard) {
 
                 // List of possible divisions from PPRRScore: 
                 List<String> pprrscoreDivisions = new ArrayList();
-                
+
                 setupData.getJSONObject("PPRRScoreFieldList").getJSONArray("Division").iterator().forEachRemaining(e -> {
                     if (e instanceof String div) {
                         pprrscoreDivisions.add(div);
@@ -949,10 +949,12 @@ public class PPRRRegDownloader extends Application {
 
                 // Read in the existing event_mapping to a map
                 Map<Integer, String> eventMap = new HashMap();
-                JSONObject map = setupData.getJSONObject("event_mapping");
-                map.keySet().forEach(k -> {
-                    eventMap.put(Integer.valueOf(k), map.optString(k));
-                });
+                if (setupData.has("event_mapping")) {
+                    JSONObject map = setupData.getJSONObject("event_mapping");
+                    map.keySet().forEach(k -> {
+                        eventMap.put(Integer.valueOf(k), map.optString(k));
+                    });
+                }
 
                 // Setup the cell factory for the divisions
                 divisionTableColumn.setCellFactory(tc -> {
@@ -975,9 +977,9 @@ public class PPRRRegDownloader extends Application {
                     });
                     return cell;
                 });
-                
+
                 eventList.clear();
-                
+
                 StringBuilder requestURL = new StringBuilder();
                 requestURL.append("https://runsignup.com/Rest/race/");
                 requestURL.append(setupData.get("race_id"));
@@ -986,19 +988,19 @@ public class PPRRRegDownloader extends Application {
                 requestURL.append("&format=json").append("&future_events_only=F&most_recent_events_only=F");
                 requestURL.append("&race_event_days_id=").append(setupData.get("race_event_days_id"));
                 requestURL.append("&include_questions=T");
-                
+
                 logger.debug("RSU Get Race Request URL: {}", requestURL.toString());
-                
+
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(requestURL.toString()))
                         .build();
-                
+
                 HttpClient client = HttpClient.newHttpClient();
-                
+
                 try {
                     HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                     logger.debug("RSU Response: {} ", response.body());
-                    
+
                     if (response.statusCode() == 200) {
                         JSONObject rsuResponse = new JSONObject(response.body());
                         if (rsuResponse.has("race")) {
@@ -1011,11 +1013,11 @@ public class PPRRRegDownloader extends Application {
                                     LocalDate eventEnd = LocalDate.parse(event.getString("end_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
                                     if (eventStart.compareTo(raceDate) <= 0 && eventEnd.compareTo(raceDate) >= 0) {
                                         event eventRecord = new event(URLDecoder.decode(event.getString("name"), StandardCharsets.UTF_8), event.getInt("event_id"), new SimpleStringProperty("IGNORE"));
-                                        
+
                                         if (eventMap.containsKey(event.getInt("event_id"))) {
                                             eventRecord.div.setValue(eventMap.get(eventRecord.eventID));
                                         }
-                                        
+
                                         logger.debug("Found Event: {} ({})", URLDecoder.decode(event.getString("name"), StandardCharsets.UTF_8), event.getInt("event_id"));
                                         eventList.add(eventRecord);
                                     } else {
@@ -1044,7 +1046,7 @@ public class PPRRRegDownloader extends Application {
                     logger.error("Exception in HttpClient response: ", ex);
                 }
             }
-            
+
             @Override
             public void onExitingPage(Wizard wizard) {
                 wizard.invalidProperty().unbind();
@@ -1057,7 +1059,7 @@ public class PPRRRegDownloader extends Application {
             }
         };
         wizardPanes.add(page4);
-        
+
         page4.setContent(page4Grid);
         page4.setHeaderText("Map RSU Event to PPRRScore Division");
 
@@ -1069,13 +1071,13 @@ public class PPRRRegDownloader extends Application {
         GridPane page5Grid = new GridPane();
         page5Grid.setVgap(10);
         page5Grid.setHgap(10);
-        
+
         record regAttribute(String pprrField, StringProperty rsuField) {
-            
+
         }
-        
+
         ObservableList<regAttribute> regAttributeList = FXCollections.observableArrayList();
-        
+
         TableView<regAttribute> regAttributeTable = new TableView(regAttributeList);
         regAttributeTable.setEditable(true);
         regAttributeTable.setPrefHeight(250);
@@ -1083,23 +1085,23 @@ public class PPRRRegDownloader extends Application {
         regAttributeTable.setMaxWidth(Double.MAX_VALUE);
         GridPane.setHgrow(regAttributeTable, Priority.ALWAYS);
         regAttributeTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        
+
         TableColumn<regAttribute, String> pprrAttributeTablecolumn = new TableColumn<>("PPRRScore Field");
         pprrAttributeTablecolumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().pprrField));
-        
+
         TableColumn<regAttribute, String> rsuAttributeTableColumn = new TableColumn<>("RSU Attribute");
         rsuAttributeTableColumn.setCellValueFactory(cellData -> cellData.getValue().rsuField);
         rsuAttributeTableColumn.setEditable(true);
-        
+
         regAttributeTable.getColumns().add(pprrAttributeTablecolumn);
         regAttributeTable.getColumns().add(rsuAttributeTableColumn);
-        
+
         page5Grid.add(regAttributeTable, 0, 0);
-        
+
         final WizardPane page5 = new WizardPane() {
             @Override
             public void onEnteringPage(Wizard wizard) {
-                
+
                 regAttributeList.clear();
 
                 // Setup the PPRRScore attributes that we need to map
@@ -1155,7 +1157,7 @@ public class PPRRRegDownloader extends Application {
                     return cell;
                 });
             }
-            
+
             @Override
             public void onExitingPage(Wizard wizard) {
                 wizard.invalidProperty().unbind();
@@ -1166,9 +1168,9 @@ public class PPRRRegDownloader extends Application {
                 setupData.put("fieldlist_mapping", pprrscoreFieldMap);
             }
         };
-        
+
         wizardPanes.add(page5);
-        
+
         page5.setContent(page5Grid);
         page5.setHeaderText("Map RSU Attributes to PPRRScore Fieldlist");
 
@@ -1179,14 +1181,14 @@ public class PPRRRegDownloader extends Application {
         for (WizardPane p : wizardPanes) {
             p.setMinSize(450, 350);
         }
-        
+
         wizard.setFlow(new LinearFlow(wizardPanes));
 
         // show wizard and wait for response
         wizard.showAndWait().ifPresent(result -> {
             if (result == ButtonType.FINISH) {
                 logger.debug("setupData: {} ", setupData.toString(4));
-                
+
                 mainConfig.clear();
 
                 // Save the rsu Username/Password to the global prefs
@@ -1205,7 +1207,7 @@ public class PPRRRegDownloader extends Application {
                 rsuConfig.put("race_id", setupData.get("race_id"));
                 rsuConfig.put("event_days_id", setupData.get("race_event_days_id"));
                 rsuConfig.put("event_date", setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
-                
+
                 logger.debug("Setup Wizard RSU Config File:  {}", rsuConfig.toString(4));
                 try {
                     // Save the mapping config to the rsuDownloader.json file in the PPRRScore race directory
@@ -1229,7 +1231,7 @@ public class PPRRRegDownloader extends Application {
                 mainConfig.put("rsuPassword", setupData.get("rsuPassword"));
                 mainConfig.put("rsuTempKey", setupData.get("rsuTempKey"));
                 mainConfig.put("rsuTempSecret", setupData.get("rsuTempSecret"));
-                
+
                 logger.debug("Main Config File:  {}", mainConfig.toString(4));
 
                 // setup the main table columns
@@ -1239,13 +1241,13 @@ public class PPRRRegDownloader extends Application {
                 downloadReg();
             }
         });
-        
+
     }
-    
+
     private JSONObject parsePPRRScoreFieldList(File pprrscoreConfDir, String s) {
         JSONObject fieldList = new JSONObject();
         File confFile = new File(pprrscoreConfDir.getAbsolutePath() + "/" + s);
-        
+
         try {
             // Parse the file and extract the following:
             // Event Name
@@ -1260,7 +1262,7 @@ public class PPRRRegDownloader extends Application {
                         if (fl.startsWith("Begin")) {
                             section = fl.replace("Begin", "");
                         }
-                        
+
                     } else if (fl.startsWith("End")) {
                         logger.debug("parsePPRRScoreFieldList: End Section: " + fl);
                         section = "";
@@ -1297,7 +1299,7 @@ public class PPRRRegDownloader extends Application {
                     }
                 }
             }
-            
+
         } catch (IOException ex) {
             logger.error("Error reading {}", confFile.getAbsolutePath());
         }
@@ -1312,7 +1314,7 @@ public class PPRRRegDownloader extends Application {
             String regFile = fieldList.optString("Year") + fieldList.optString("Abbrev") + "AllRegistrations.csv";
             fieldList.put("RegFile", regFile);
         }
-        
+
         logger.debug("parsePPRRScoreFieldList: resulting JSONObject: {}", fieldList.toString(4));
         // Return as a JSONObject that we can use downstream
 
@@ -1334,7 +1336,7 @@ public class PPRRRegDownloader extends Application {
         if (s == null || s.isEmpty()) {
             return "";
         }
-        
+
         if (s.equals(s.toLowerCase()) || s.equals(s.toUpperCase())) {
             String n = capitalizeSentence(s);
             n = n.replace(" Iii", " III").replace(" Ii", " II");
@@ -1368,7 +1370,7 @@ public class PPRRRegDownloader extends Application {
         }
         return result.toString();
     }
-    
+
     private String upperIfNoVowel(String n) {
         // if both letters are constanants (e.g, "JT" or "MC"), 
         // then uppercase them
@@ -1380,15 +1382,15 @@ public class PPRRRegDownloader extends Application {
                 && a[1] != 'a' && a[1] != 'e' && a[1] != 'i' && a[1] != 'o' && a[1] != 'u') {
             return n.toUpperCase();
         }
-        
+
         return n;
     }
-    
+
     private String fixDOB(String dob) {
         String[] d = dob.split("-");
         return d[1] + "/" + d[2] + "/" + d[0];
     }
-    
+
     private String fixGender(String gend) {
         if (gend.isEmpty()) {
             return "PNTS";
