@@ -10,7 +10,7 @@
         "jdk": false,
         "args": ["--add-opens javafx.graphics/javafx.scene=org.controlsfx.controls"],
         "javaVersion": "21",
-        "jar": "target/PPRRRegDownloader-0.5.jar",
+        "jar": "target/PPRRRegDownloader-1.0-uber.jar",
         "javafx": true,
         "title": "PPRRRegDownloader"
     },

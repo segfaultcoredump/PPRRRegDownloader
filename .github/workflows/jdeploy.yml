@@ -27,4 +27,4 @@ jobs:
       - name: Build App Installer Bundles
         uses: shannah/jdeploy@master
         with:
-          github_token: ${{ github.token }}
+          github_token: ${{ secret.jdeploy }}
