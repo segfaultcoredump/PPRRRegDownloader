@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -99,6 +100,9 @@ public class PPRRRegDownloader extends Application {
     private static final FilteredList<Registration> filteredRegistrationList = new FilteredList<>(registrationList, p -> true);
     private static final TableView<Registration> registrationsTableView = new TableView();
     private static final TextField searchTextField = new TextField();
+    
+    private static final Map<String, String> cityTyposMap = new HashMap();
+
 
     //private Preferences prefs = Preferences.getInstance();
     @Override
@@ -381,7 +385,7 @@ public class PPRRRegDownloader extends Application {
                     try {
                         do {
 
-                            if (!mainConfig.has("rsuTempKey") && ! mainConfig.get("rsuLoginType").equals("API")) {
+                            if (!mainConfig.has("rsuTempKey") && !mainConfig.get("rsuLoginType").equals("API")) {
                                 updateRSUKeys();
                             }
 
@@ -1333,6 +1337,37 @@ public class PPRRRegDownloader extends Application {
 
                 logger.debug("Main Config File:  {}", mainConfig.toString(4));
 
+                // Setup the city -> name map
+                cityTyposMap.put("co springs", "Colorado Springs");
+                cityTyposMap.put("c/s", "Colorado Springs");
+                cityTyposMap.put("colorado spgs", "Colorado Springs");
+                cityTyposMap.put("co spgs", "Colorado Springs");
+                cityTyposMap.put("colo spgs", "Colorado Springs");
+                cityTyposMap.put("colorado sprgs", "Colorado Springs");
+                cityTyposMap.put("cs", "Colorado Springs");
+                cityTyposMap.put("colorado spring", "Colorado Springs");
+                cityTyposMap.put("cos", "Colorado Springs");
+
+                // if the <pprrscoredir>/../../CityNames.txt file exists, suck it into the map
+                // This file is from a windows system so it uses Windows-1252 and not UTF-8 :-/
+                Path pprrScoreDir = Paths.get(mainConfig.getString("PPRRScoreDir")).getParent().getParent();
+                Path cityNames = Paths.get(pprrScoreDir.toString() + "/CityNames.txt");
+                if (Files.exists(cityNames)) {
+                    logger.debug("CityNames.txt file found at {}", cityNames.toString());
+                    try {
+                        Files.lines(cityNames,Charset.forName("windows-1252")).toList().forEach(l -> {
+                            //logger.debug("CityNames.txt readline: {}", l);
+                            String[] m = l.split(",", 2);
+                            if (m.length == 2) {
+                                cityTyposMap.put(m[0], m[1]);
+                                logger.debug("cityTypos Map addition: {} -> {}", m[0], m[1]);
+                            }
+                        });
+                    } catch (Exception ex) {
+                        logger.error("Unable to read CityNames.txt", ex);
+                    }
+                }
+
                 // setup the main table columns
                 setupTableColumns();
 
@@ -1504,17 +1539,6 @@ public class PPRRRegDownloader extends Application {
 
     private static String normalizeCities(String city) {
         String c = city.toLowerCase();
-
-        Map<String, String> cityTyposMap = new HashMap();
-        cityTyposMap.put("co springs", "Colorado Springs");
-        cityTyposMap.put("c/s", "Colorado Springs");
-        cityTyposMap.put("colorado spgs", "Colorado Springs");
-        cityTyposMap.put("co spgs", "Colorado Springs");
-        cityTyposMap.put("colo spgs", "Colorado Springs");
-        cityTyposMap.put("colorado sprgs", "Colorado Springs");
-        cityTyposMap.put("cs", "Colorado Springs");
-        cityTyposMap.put("colorado spring", "Colorado Springs");
-        cityTyposMap.put("cos", "Colorado Springs");
 
         // look for inadvertant reduplication
         // e.g "Colorado SpringsColorado Springs"
