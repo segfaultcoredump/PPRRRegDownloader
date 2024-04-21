@@ -381,7 +381,7 @@ public class PPRRRegDownloader extends Application {
                     try {
                         do {
 
-                            if (!mainConfig.has("rsuTempKey")) {
+                            if (!mainConfig.has("rsuTempKey") && ! mainConfig.get("rsuLoginType").equals("API")) {
                                 updateRSUKeys();
                             }
 
@@ -390,8 +390,13 @@ public class PPRRRegDownloader extends Application {
                             rsuURL.append("/participants?format=json&event_id=").append(event);
                             rsuURL.append("&page=").append(page.toString()).append("&results_per_page=1000");
                             rsuURL.append("&include_user_anonymous_flag=T&include_questions=T&include_registration_addons=T&supports_nb=T");
-                            rsuURL.append("&tmp_key=").append(mainConfig.get("rsuTempKey"));
-                            rsuURL.append("&tmp_secret=").append(mainConfig.get("rsuTempSecret"));
+                            if (mainConfig.get("rsuLoginType").equals("API")) {
+                                rsuURL.append("&api_key=").append(mainConfig.get("rsuUsername"));
+                                rsuURL.append("&api_secret=").append(mainConfig.get("rsuPassword"));
+                            } else {
+                                rsuURL.append("&tmp_key=").append(mainConfig.get("rsuTempKey"));
+                                rsuURL.append("&tmp_secret=").append(mainConfig.get("rsuTempSecret"));
+                            }
 
                             logger.debug("Participant request for race_id={} and event_id={}: {}", mainConfig.get("race_id"), event, rsuURL.toString());
                             HttpRequest request = HttpRequest.newBuilder()
@@ -450,7 +455,7 @@ public class PPRRRegDownloader extends Application {
                                                             case "Gender" ->
                                                                 r.fieldlist.put(k, fixGender(rsuReg.getJSONObject("user").optString("gender")));
                                                             case "City" ->
-                                                                r.fieldlist.put(k, titleCase(rsuReg.getJSONObject("user").getJSONObject("address").optString("city")));
+                                                                r.fieldlist.put(k, titleCase(normalizeCities(rsuReg.getJSONObject("user").getJSONObject("address").optString("city"))));
                                                             case "State" ->
                                                                 r.fieldlist.put(k, rsuReg.getJSONObject("user").getJSONObject("address").optString("state"));
                                                             case "Country" ->
@@ -686,13 +691,24 @@ public class PPRRRegDownloader extends Application {
         page2Grid.setVgap(10);
         page2Grid.setHgap(10);
 
-        page2Grid.add(new Label("Username:"), 0, row);
+        page2Grid.add(new Label("Login Method:"), 0, row);
+        ComboBox<String> rsuLoginTypeComboBox = new ComboBox<>();
+        rsuLoginTypeComboBox.getItems().addAll("Username / Password", "API Key/Secret");
+        if (userPrefs.getGlobalPrefs("rsuLoginType").equals("API")) {
+            rsuLoginTypeComboBox.getSelectionModel().select("API Key/Secret");
+        } else {
+            rsuLoginTypeComboBox.getSelectionModel().select("Username / Password");
+        }
+        GridPane.setHgrow(rsuLoginTypeComboBox, Priority.ALWAYS);
+        page2Grid.add(rsuLoginTypeComboBox, 1, row++);
+
+        page2Grid.add(new Label("Username / Key:"), 0, row);
         TextField rsuUsernameTextField = createTextField("rsuUsername");
         rsuUsernameTextField.setText(userPrefs.getGlobalPrefs("rsuUsername"));
         GridPane.setHgrow(rsuUsernameTextField, Priority.ALWAYS);
         page2Grid.add(rsuUsernameTextField, 1, row++);
 
-        page2Grid.add(new Label("Password:"), 0, row);
+        page2Grid.add(new Label("Password / Secret:"), 0, row);
         PasswordField rsuPasswordTextField = new PasswordField();
         GridPane.setHgrow(rsuPasswordTextField, Priority.ALWAYS);
         rsuPasswordTextField.setText(userPrefs.getRSUPassword());
@@ -718,49 +734,106 @@ public class PPRRRegDownloader extends Application {
         });
 
         validateButton.setOnAction((event) -> {
-            StringBuilder postData = new StringBuilder();
-            postData.append("email=");
-            postData.append(URLEncoder.encode(rsuUsernameTextField.getText(), StandardCharsets.UTF_8));
-            postData.append("&password=");
-            postData.append(URLEncoder.encode(rsuPasswordTextField.getText(), StandardCharsets.UTF_8));
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://runsignup.com/Rest/login?format=json&supports_nb=T"))
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .POST(BodyPublishers.ofString(postData.toString()))
-                    .build();
 
-            HttpClient client = HttpClient.newHttpClient();
+            // Are we using an api_key/secret or a username / password
+            if (rsuLoginTypeComboBox.getSelectionModel().getSelectedItem().contains("Username")) {
+                StringBuilder postData = new StringBuilder();
+                postData.append("email=");
+                postData.append(URLEncoder.encode(rsuUsernameTextField.getText(), StandardCharsets.UTF_8));
+                postData.append("&password=");
+                postData.append(URLEncoder.encode(rsuPasswordTextField.getText(), StandardCharsets.UTF_8));
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create("https://runsignup.com/Rest/login?format=json&supports_nb=T"))
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(BodyPublishers.ofString(postData.toString()))
+                        .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpClient client = HttpClient.newHttpClient();
 
-                if (response.statusCode() == 200) {
-                    JSONObject rsuResponse = new JSONObject(response.body());
-                    if (rsuResponse.has("tmp_key")) {
-                        pane2OkayToGo.setValue(true);
-                        loginSuccessLabel.setText("Valid");
-                        logger.debug("RSU Response: {}", response.body());
+                try {
+                    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-                        setupData.put("rsuUsername", rsuUsernameTextField.getText());
-                        setupData.put("rsuPassword", rsuPasswordTextField.getText());
-                        setupData.put("rsuTempKey", rsuResponse.get("tmp_key"));
-                        setupData.put("rsuTempSecret", rsuResponse.get("tmp_secret"));
-                        logger.debug(" RSU Temp Key/Secret: {} / {}", rsuResponse.get("tmp_key"), rsuResponse.get("tmp_secret"));
+                    if (response.statusCode() == 200) {
+                        JSONObject rsuResponse = new JSONObject(response.body());
+                        if (rsuResponse.has("tmp_key")) {
+                            pane2OkayToGo.setValue(true);
+                            loginSuccessLabel.setText("Valid");
+                            logger.debug("RSU Response: {}", response.body());
+
+                            setupData.put("rsuLoginType", "PASSWORD");
+                            setupData.put("rsuUsername", rsuUsernameTextField.getText());
+                            setupData.put("rsuPassword", rsuPasswordTextField.getText());
+                            setupData.put("rsuTempKey", rsuResponse.get("tmp_key"));
+                            setupData.put("rsuTempSecret", rsuResponse.get("tmp_secret"));
+                            logger.debug(" RSU Temp Key/Secret: {} / {}", rsuResponse.get("tmp_key"), rsuResponse.get("tmp_secret"));
+                        } else {
+                            logger.error("Error in RSU Login: {} ", response.body());
+                            pane2OkayToGo.setValue(false);
+                            loginSuccessLabel.setText("Invalid Username or Password!");
+                        }
                     } else {
                         logger.error("Error in RSU Login: {} ", response.body());
                         pane2OkayToGo.setValue(false);
                         loginSuccessLabel.setText("Invalid Username or Password!");
                     }
-                } else {
-                    logger.error("Error in RSU Login: {} ", response.body());
-                    pane2OkayToGo.setValue(false);
-                    loginSuccessLabel.setText("Invalid Username or Password!");
-                }
 
-            } catch (Exception ex) {
-                logger.error("Exception in HttpClient response: ", ex);
-                pane2OkayToGo.setValue(false);
-                loginSuccessLabel.setText("Error in RSU Login Request");
+                } catch (Exception ex) {
+                    logger.error("Exception in HttpClient response: ", ex);
+                    pane2OkayToGo.setValue(false);
+                    loginSuccessLabel.setText("Error in RSU Login Request");
+                }
+            } else {
+                // There is no login equivalent for the key/secret
+                // so we will just make a call to /Rest/races/ and
+                // see how many we get back
+                // get the list of from RSU
+                // https://runsignup.com/Rest/races?
+                // tmp_key=KEY&tmp_secret=SECRET
+                // &format=json&include_event_days=F&page=1&results_per_page=50&sort=name+ASC
+                // &start_date=2024-05-27&end_date=2024-05-27
+                StringBuilder requestURL = new StringBuilder();
+                requestURL.append("https://runsignup.com/Rest/races");
+                requestURL.append("?api_key=").append(rsuUsernameTextField.getText());
+                requestURL.append("&api_secret=").append(rsuPasswordTextField.getText());
+                requestURL.append("&format=json").append("&include_event_days=T");
+                requestURL.append("&page=1&results_per_page=50&sort=name+ASC");
+                requestURL.append("&start_date=").append(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
+                requestURL.append("&end_date=").append(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
+
+                logger.debug("RSU Get Races Request URL: {}", requestURL.toString());
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(requestURL.toString()))
+                        .build();
+
+                HttpClient client = HttpClient.newHttpClient();
+
+                try {
+                    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                    logger.debug("RSU Response: {} ", response.body());
+
+                    if (response.statusCode() == 200) {
+                        JSONObject rsuResponse = new JSONObject(response.body());
+                        if (rsuResponse.has("races")) {
+                            int responseSize = rsuResponse.getJSONArray("races").length();
+                            if (responseSize > 0 && responseSize < 50) {
+                                pane2OkayToGo.setValue(true);
+                                loginSuccessLabel.setText("Valid");
+                                setupData.put("rsuLoginType", "API");
+                                setupData.put("rsuUsername", rsuUsernameTextField.getText());
+                                setupData.put("rsuPassword", rsuPasswordTextField.getText());
+                            } else {
+                                loginSuccessLabel.setText("Invalid API Secret / Key");
+                            }
+                        } else {
+                            logger.error("Error in RSU Login: {} ", response.body());
+                        }
+                    } else {
+                        logger.error("Error in RSU Login: {} ", response.body());
+                    }
+                } catch (Exception ex) {
+                    logger.error("Exception in HttpClient response: ", ex);
+                }
             }
 
         });
@@ -781,8 +854,11 @@ public class PPRRRegDownloader extends Application {
         page2.setContent(page2Grid);
         page2.setHeaderText("RunSignUp Login");
 
-        // Page 3: Get list of races from RSU 
-        // And prompt the user to select the Race. Snag the race_event_days_id that is between the start_date and end_date for the event
+        /////////////////////////////////
+        // 
+        // Wizard Pane 3: Get list of races from RSU 
+        // 
+        // Prompt the user to select the Race. Snag the race_event_days_id that is between the start_date and end_date for the event
         row = 0;
 
         GridPane page3Grid = new GridPane();
@@ -844,8 +920,14 @@ public class PPRRRegDownloader extends Application {
                 // &start_date=2024-05-27&end_date=2024-05-27
                 StringBuilder requestURL = new StringBuilder();
                 requestURL.append("https://runsignup.com/Rest/races");
-                requestURL.append("?tmp_key=").append(setupData.get("rsuTempKey"));
-                requestURL.append("&tmp_secret=").append(setupData.get("rsuTempSecret"));
+
+                if (setupData.get("rsuLoginType").equals("API")) {
+                    requestURL.append("?api_key=").append(setupData.get("rsuUsername"));
+                    requestURL.append("&api_secret=").append(setupData.get("rsuPassword"));
+                } else {
+                    requestURL.append("?tmp_key=").append(setupData.get("rsuTempKey"));
+                    requestURL.append("&tmp_secret=").append(setupData.get("rsuTempSecret"));
+                }
                 requestURL.append("&format=json").append("&include_event_days=T");
                 requestURL.append("&page=1&results_per_page=50&sort=name+ASC");
                 requestURL.append("&start_date=").append(setupData.getJSONObject("PPRRScoreFieldList").getString("EventDate"));
@@ -990,8 +1072,13 @@ public class PPRRRegDownloader extends Application {
                 StringBuilder requestURL = new StringBuilder();
                 requestURL.append("https://runsignup.com/Rest/race/");
                 requestURL.append(setupData.get("race_id"));
-                requestURL.append("?tmp_key=").append(setupData.get("rsuTempKey"));
-                requestURL.append("&tmp_secret=").append(setupData.get("rsuTempSecret"));
+                if (setupData.get("rsuLoginType").equals("API")) {
+                    requestURL.append("?api_key=").append(setupData.get("rsuUsername"));
+                    requestURL.append("&api_secret=").append(setupData.get("rsuPassword"));
+                } else {
+                    requestURL.append("?tmp_key=").append(setupData.get("rsuTempKey"));
+                    requestURL.append("&tmp_secret=").append(setupData.get("rsuTempSecret"));
+                }
                 requestURL.append("&format=json").append("&future_events_only=F&most_recent_events_only=F");
                 requestURL.append("&race_event_days_id=").append(setupData.get("race_event_days_id"));
                 requestURL.append("&include_questions=T");
@@ -1199,6 +1286,7 @@ public class PPRRRegDownloader extends Application {
                 mainConfig.clear();
 
                 // Save the rsu Username/Password to the global prefs
+                userPrefs.setGlobalPrefs("rsuLoginType", setupData.getString("rsuLoginType"));
                 userPrefs.setGlobalPrefs("rsuUsername", setupData.getString("rsuUsername"));
                 userPrefs.setRSUPassword(setupData.getString("rsuPassword"));
 
@@ -1235,10 +1323,13 @@ public class PPRRRegDownloader extends Application {
                 mainConfig.put("RegFile", setupData.getJSONObject("PPRRScoreFieldList").getString("RegFile"));
 
                 // Stash the username and password
+                mainConfig.put("rsuLoginType", setupData.get("rsuLoginType"));
                 mainConfig.put("rsuUsername", setupData.get("rsuUsername"));
                 mainConfig.put("rsuPassword", setupData.get("rsuPassword"));
-                mainConfig.put("rsuTempKey", setupData.get("rsuTempKey"));
-                mainConfig.put("rsuTempSecret", setupData.get("rsuTempSecret"));
+                if (!setupData.getString("rsuLoginType").equals("API")) {
+                    mainConfig.put("rsuTempKey", setupData.get("rsuTempKey"));
+                    mainConfig.put("rsuTempSecret", setupData.get("rsuTempSecret"));
+                }
 
                 logger.debug("Main Config File:  {}", mainConfig.toString(4));
 
@@ -1351,7 +1442,9 @@ public class PPRRRegDownloader extends Application {
             if (n.length() == 2) {
                 n = upperIfNoVowel(n);
             }
-            //logger.debug("titleCase() Changed: " + s + " -> " + n);
+            if (!s.equals(n)) {
+                logger.debug("titleCase() Changed: " + s + " -> " + n);
+            }
             return n;
         }
         return s;
@@ -1407,5 +1500,37 @@ public class PPRRRegDownloader extends Application {
             return "NB";
         }
         return gend;
+    }
+
+    private static String normalizeCities(String city) {
+        String c = city.toLowerCase();
+
+        Map<String, String> cityTyposMap = new HashMap();
+        cityTyposMap.put("co springs", "Colorado Springs");
+        cityTyposMap.put("c/s", "Colorado Springs");
+        cityTyposMap.put("colorado spgs", "Colorado Springs");
+        cityTyposMap.put("co spgs", "Colorado Springs");
+        cityTyposMap.put("colo spgs", "Colorado Springs");
+        cityTyposMap.put("colorado sprgs", "Colorado Springs");
+        cityTyposMap.put("cs", "Colorado Springs");
+        cityTyposMap.put("colorado spring", "Colorado Springs");
+        cityTyposMap.put("cos", "Colorado Springs");
+
+        // look for inadvertant reduplication
+        // e.g "Colorado SpringsColorado Springs"
+        // Actual reduplicated names will be odd (like "Walla Walla")
+        if (c.length() % 2 == 0) {
+            if (c.substring(0, (c.length() / 2)).equals(c.substring(c.length() / 2, c.length()))) {
+                c = c.substring(0, (c.length() / 2));
+            }
+        }
+
+        if (cityTyposMap.containsKey(c)) {
+            return cityTyposMap.get(c);
+        }
+        if (c.equals(city.toLowerCase())) {
+            return city;
+        }
+        return c;
     }
 }
