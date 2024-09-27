@@ -1524,7 +1524,7 @@ public class PPRRRegDownloader extends Application {
 
     private String fixDOB(String dob) {
         String[] d = dob.split("-");
-        return d[1] + "/" + d[2] + "/" + d[0];
+        return d.length==3 ? d[1] + "/" + d[2] + "/" + d[0] : "";
     }
 
     private String fixGender(String gend) {
