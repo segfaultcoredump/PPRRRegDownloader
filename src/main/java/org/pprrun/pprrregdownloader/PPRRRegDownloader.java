@@ -259,7 +259,8 @@ public class PPRRRegDownloader extends Application {
         registrationList.forEach(r -> {
             StringBuilder reg = new StringBuilder();
             fieldlist.forEach(f -> {
-                reg.append(r.getVal(f)).append(",");
+                // Strip any ,'s from RSU to avoid screwing up the PPRRScore csv parser. 
+                reg.append(r.getVal(f).replaceAll(",", " ")).append(",");
             });
             output.add(StringUtils.stripAccents(reg.toString().substring(0, reg.length() - 1)));
 
@@ -1108,7 +1109,9 @@ public class PPRRRegDownloader extends Application {
                             rsuResponse.getJSONObject("race").getJSONArray("events").forEach((r) -> {
                                 if (r instanceof JSONObject event) {
                                     LocalDate eventStart = LocalDate.parse(event.getString("start_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
-                                    LocalDate eventEnd = LocalDate.parse(event.getString("end_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
+                                    // The end_time is optional and thus can be null. So it will default to the start_date. 
+                                    LocalDate eventEnd = eventStart;
+                                    if (! event.isNull("end_time")) eventEnd = LocalDate.parse(event.getString("end_time").replaceAll(" ..:..", ""), DateTimeFormatter.ofPattern("M/d/yyyy"));
                                     if (eventStart.compareTo(raceDate) <= 0 && eventEnd.compareTo(raceDate) >= 0) {
                                         event eventRecord = new event(URLDecoder.decode(event.getString("name"), StandardCharsets.UTF_8), event.getInt("event_id"), new SimpleStringProperty("IGNORE"));
 
