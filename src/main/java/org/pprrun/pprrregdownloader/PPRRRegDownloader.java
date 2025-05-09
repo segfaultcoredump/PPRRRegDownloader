@@ -1326,7 +1326,7 @@ public class PPRRRegDownloader extends Application {
                 eventDate.setValue(mainConfig.getString("event_date"));
 
                 // Stash the race short name
-                mainConfig.put("event_name_short", setupData.getJSONObject("PPRRScoreFieldList").getString("RacenameShort"));
+                //mainConfig.put("event_name_short", setupData.getJSONObject("PPRRScoreFieldList").getString("RacenameShort"));
                 mainConfig.put("RegFile", setupData.getJSONObject("PPRRScoreFieldList").getString("RegFile"));
 
                 // Stash the username and password
